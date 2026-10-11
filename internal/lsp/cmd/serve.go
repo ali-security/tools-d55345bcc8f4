@@ -25,7 +25,6 @@ import (
 type Serve struct {
 	Logfile     string        `flag:"logfile" help:"filename to log to. if value is \"auto\", then logging to a default output file is enabled"`
 	Mode        string        `flag:"mode" help:"no effect"`
-	Port        int           `flag:"port" help:"port on which to run gopls for debugging purposes"`
 	Address     string        `flag:"listen" help:"address on which to listen for remote connections. If prefixed by 'unix;', the subsequent address is assumed to be a unix domain socket. Otherwise, TCP is used."`
 	IdleTimeout time.Duration `flag:"listen.timeout" help:"when used with -listen, shut down the server when there are no connected clients for this duration"`
 	Trace       bool          `flag:"rpc.trace" help:"print the full rpc trace in lsp inspector format"`
@@ -77,13 +76,14 @@ func (s *Serve) Run(ctx context.Context, args ...string) error {
 	}
 
 	if s.Address != "" {
+		// -listen=address
 		network, addr := parseAddr(s.Address)
+		if strings.HasPrefix(addr, ":") {
+			return fmt.Errorf("-listen=%s implicitly binds all network interfaces; please use an explicit host such as 0.0.0.0 (all interfaces) or localhost (safer)", addr)
+		}
 		return jsonrpc2.ListenAndServe(ctx, network, addr, ss, s.IdleTimeout)
 	}
-	if s.Port != 0 {
-		addr := fmt.Sprintf(":%v", s.Port)
-		return jsonrpc2.ListenAndServe(ctx, "tcp", addr, ss, s.IdleTimeout)
-	}
+	// communicate over stdin/stdout
 	stream := jsonrpc2.NewHeaderStream(os.Stdin, os.Stdout)
 	if s.Trace && di != nil {
 		stream = protocol.LoggingStream(stream, di.LogWriter)
@@ -91,7 +91,8 @@ func (s *Serve) Run(ctx context.Context, args ...string) error {
 	return ss.ServeStream(ctx, stream)
 }
 
-// parseAddr parses the -listen flag in to a network, and address.
+// parseAddr parses the -listen flag in to a network, and address
+// (e.g. "tcp;localhost:12345").
 func parseAddr(listen string) (network string, address string) {
 	// Allow passing just -remote=auto, as a shorthand for using automatic remote
 	// resolution.
