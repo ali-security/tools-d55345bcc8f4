@@ -7,6 +7,9 @@
 package span_test
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"golang.org/x/tools/internal/span"
@@ -57,6 +60,14 @@ func TestURIFromPath(t *testing.T) {
 			wantURI:  span.URI("file:///C:/Go/src/bob%20george/george/george.go"),
 		},
 	} {
+		// Drive-relative paths resolve against the current drive; these
+		// expectations assume the working directory is on C:.
+		if strings.HasPrefix(test.path, `\`) {
+			if wd, err := os.Getwd(); err == nil && !strings.EqualFold(filepath.VolumeName(wd), "C:") {
+				t.Logf("skipping %q: working directory %q is not on drive C:", test.path, wd)
+				continue
+			}
+		}
 		got := span.URIFromPath(test.path)
 		if got != test.wantURI {
 			t.Errorf("URIFromPath(%q): got %q, expected %q", test.path, got, test.wantURI)

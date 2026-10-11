@@ -66,6 +66,9 @@ func TestCgoOption(t *testing.T) {
 	}
 
 	testenv.NeedsGoPackages(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping on windows; net.cgoLookupHost does not exist there")
+	}
 
 	// TODO(adonovan): see if we can get away without these old
 	// go/loader hacks now that we use the go list command.
